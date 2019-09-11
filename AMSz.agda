@@ -2,9 +2,9 @@
 module AMSz where
 
 open import Lib hiding (id; _∘_)
+--import II as S
 open import II using (PS; P; S)
-import II as S
---import IIA as IIA
+import IIA as S
 
 infixl 7 _[_]TS
 infixl 7 _[_]TP
@@ -24,18 +24,23 @@ record Con : Set₂ where
   field
     ᴬ   : Set₁
     ᴹ   : ᴬ → ᴬ → Set₁
+    sz  : S.Con
+    Cod : S.Tm sz S.U
+    Dec : S.Tm sz (S.Π Cod S.U)
     
 record TyS (Γ : Con) : Set₂ where
   module Γ = Con Γ
   field
     ᴬ   : Γ.ᴬ → Set₁
     ᴹ   : ∀{γᴬ δᴬ} → Γ.ᴹ γᴬ δᴬ → ᴬ γᴬ → ᴬ δᴬ → Set
+    sz  : S.Ty Γ.sz
 
 record TyP (Γ : Con) : Set₂ where
   module Γ = Con Γ
   field
     ᴬ   : Γ.ᴬ → Set
     ᴹ   : ∀{γᴬ δᴬ} → Γ.ᴹ γᴬ δᴬ → ᴬ γᴬ → ᴬ δᴬ → Set₁
+    sz  : S.Ty Γ.sz
 
 Ty : (Γ : Con) (k : PS) → Set₂
 Ty Γ P = TyP Γ
@@ -47,6 +52,7 @@ record TmS (Γ : Con) (B : TyS Γ) : Set₂ where
   field
     ᴬ   : (γᴬ : Γ.ᴬ) → B.ᴬ γᴬ
     ᴹ   : ∀{γᴬ δᴬ}(γᴹ : Γ.ᴹ γᴬ δᴬ) → B.ᴹ γᴹ (ᴬ γᴬ) (ᴬ δᴬ)
+    sz  : S.Tm Γ.sz B.sz
 
 record TmP (Γ : Con) (A : TyP Γ) : Set₂ where
   module Γ = Con Γ
@@ -54,6 +60,7 @@ record TmP (Γ : Con) (A : TyP Γ) : Set₂ where
   field
     ᴬ   : (γᴬ : Γ.ᴬ) → A.ᴬ γᴬ
     ᴹ   : ∀{γᴬ δᴬ}(γᴹ : Γ.ᴹ γᴬ δᴬ) → A.ᴹ γᴹ (ᴬ γᴬ) (ᴬ δᴬ)
+    sz  : S.Tm Γ.sz A.sz
 
 Tm : {k : PS} → (Γ : Con) → (A : Ty Γ k) → Set₂
 Tm {P} = TmP
@@ -65,21 +72,31 @@ record Sub (Γ : Con) (Δ : Con) : Set₂ where
   field
     ᴬ   : Γ.ᴬ → Δ.ᴬ
     ᴹ   : ∀{γᴬ δᴬ} → Γ.ᴹ γᴬ δᴬ → Δ.ᴹ (ᴬ γᴬ) (ᴬ δᴬ)
+    sz  : S.Sub Γ.sz Δ.sz
 
 ∙ : Con
-∙ = record { ᴬ  = Lift _ ⊤ ;
-             ᴹ  = λ _ _ → Lift _ ⊤ }
+∙ = record { ᴬ   = Lift _ ⊤ ;
+             ᴹ   = λ _ _ → Lift _ ⊤ ;
+             sz  = S.∙ S.▶ S.U S.▶ S.Π S.vz S.U ;
+             Cod = S.vs S.vz ;
+             Dec = S.vz }
 
 _▶S_ : (Γ : Con) → TyS Γ → Con
 Γ ▶S B = record { ᴬ   = Σ Γ.ᴬ B.ᴬ ;
-                  ᴹ   = λ { (γᴬ , αᴬ) (δᴬ , βᴬ) → Σ (Γ.ᴹ γᴬ δᴬ) λ γᴹ → B.ᴹ γᴹ αᴬ βᴬ } }
+                  ᴹ   = λ { (γᴬ , αᴬ) (δᴬ , βᴬ) → Σ (Γ.ᴹ γᴬ δᴬ) λ γᴹ → B.ᴹ γᴹ αᴬ βᴬ } ;
+                  sz  = Γ.sz S.▶ B.sz ;
+                  Cod = S.vs Γ.Cod ;
+                  Dec = S.vs Γ.Dec }
   where
     module Γ = Con Γ
     module B = TyS B
 
 _▶P_ : (Γ : Con) → TyP Γ → Con
 Γ ▶P A = record { ᴬ   = Σ Γ.ᴬ A.ᴬ ;
-                  ᴹ   = λ { (γᴬ , αᴬ) (δᴬ , βᴬ) → Σ (Γ.ᴹ γᴬ δᴬ) λ γᴹ → A.ᴹ γᴹ αᴬ βᴬ } }
+                  ᴹ   = λ { (γᴬ , αᴬ) (δᴬ , βᴬ) → Σ (Γ.ᴹ γᴬ δᴬ) λ γᴹ → A.ᴹ γᴹ αᴬ βᴬ } ;
+                  sz  = Γ.sz S.▶ A.sz ;
+                  Cod = S.vs Γ.Cod ;
+                  Dec = S.vs Γ.Dec }
   where
     module Γ = Con Γ
     module A = TyP A
@@ -90,13 +107,15 @@ _▶_ {S} Γ A = Γ ▶S A
 
 U : {Γ : Con} → TyS Γ
 U {Γ} = record { ᴬ   = λ γ → Set ;
-                 ᴹ   = λ γᴹ γᴬ δᴬ → γᴬ → δᴬ }
+                 ᴹ   = λ γᴹ γᴬ δᴬ → γᴬ → δᴬ ;
+                 sz  = S.El Γ.Cod }
   where
     module Γ = Con Γ
 
 El : {Γ : Con} (a : TmS Γ U) → TyP Γ
 El {Γ} a = record { ᴬ   = λ γᴬ → a.ᴬ γᴬ ;
-                    ᴹ   = λ γᴹ αᴬ βᴬ → Lift _ (a.ᴹ γᴹ αᴬ ≡ βᴬ) }
+                    ᴹ   = λ γᴹ αᴬ βᴬ → Lift _ (a.ᴹ γᴹ αᴬ ≡ βᴬ) ;
+                    sz  = S.El (Γ.Dec S.$ a.sz) }
   where
     module Γ = Con Γ
     module a = TmS a
@@ -104,18 +123,20 @@ El {Γ} a = record { ᴬ   = λ γᴬ → a.ᴬ γᴬ ;
 -- Internal function type
 ΠS : {Γ : Con} (a : TmS Γ U) (B : TyS (Γ ▶P El a)) → TyS Γ
 ΠS {Γ} a B = record { ᴬ   = λ γᴬ → (α : a.ᴬ γᴬ) → B.ᴬ (γᴬ , α) ;
-                      ᴹ   = λ {γᴬ} γᴹ πᴬ ϕᴬ → (αᴬ : a.ᴬ γᴬ)→ B.ᴹ (γᴹ , lift refl) (πᴬ αᴬ) (ϕᴬ (a.ᴹ γᴹ αᴬ)) }
+                      ᴹ   = λ {γᴬ} γᴹ πᴬ ϕᴬ → (αᴬ : a.ᴬ γᴬ)→ B.ᴹ (γᴹ , lift refl) (πᴬ αᴬ) (ϕᴬ (a.ᴹ γᴹ αᴬ)) ;
+                      sz  = S.Π (Γ.Dec S.$ a.sz) B.sz }
   where
     module Γ = Con Γ
     module a = TmS a
     module B = TyS B
 
-ΠP : {Γ : Con} (a : TmS Γ U) (B : TyP (Γ ▶P El a)) → TyP Γ
-ΠP {Γ} a B = record { ᴬ   = λ γᴬ → (α : a.ᴬ γᴬ) → B.ᴬ (γᴬ , α) ;
-                      ᴹ   = λ {γᴬ} γᴹ πᴬ ϕᴬ → (αᴬ : a.ᴬ γᴬ) → B.ᴹ (γᴹ , lift refl) (πᴬ αᴬ) (ϕᴬ (a.ᴹ γᴹ αᴬ)) }
+ΠP : {Γ : Con} (a : TmS Γ U) (A : TyP (Γ ▶P El a)) → TyP Γ
+ΠP {Γ} a A = record { ᴬ   = λ γᴬ → (α : a.ᴬ γᴬ) → A.ᴬ (γᴬ , α) ;
+                      ᴹ   = λ {γᴬ} γᴹ πᴬ ϕᴬ → (αᴬ : a.ᴬ γᴬ) → A.ᴹ (γᴹ , lift refl) (πᴬ αᴬ) (ϕᴬ (a.ᴹ γᴹ αᴬ)) ;
+                      sz  = S.Π (Γ.Dec S.$ a.sz) A.sz }
   where
     module a = TmS a
-    module B = TyP B
+    module A = TyP A
     module Γ = Con Γ
 
 Π : ∀{k}{Γ : Con} → (a : TmS Γ U) → (B : Ty (Γ ▶ El a) k) → Ty Γ k
@@ -124,7 +145,8 @@ El {Γ} a = record { ᴬ   = λ γᴬ → a.ᴬ γᴬ ;
 
 appS : {Γ : Con} {a : TmS Γ U} → {B : TyS (Γ ▶P El a)} → (f : TmS Γ (ΠS a B)) → TmS (Γ ▶P El a) B
 appS {Γ}{a}{B} f = record { ᴬ   = λ { (γ , α) → f.ᴬ γ α } ;
-                            ᴹ   = λ { {γᴬ , αᴬ} {δᴬ , βᴬ} (γᴹ , lift refl) → (f.ᴹ γᴹ αᴬ) } }
+                            ᴹ   = λ { {γᴬ , αᴬ} {δᴬ , βᴬ} (γᴹ , lift refl) → (f.ᴹ γᴹ αᴬ) } ;
+                            sz  = S.app f.sz }
   where
     module a = TmS a
     module B = TyS B
@@ -133,7 +155,8 @@ appS {Γ}{a}{B} f = record { ᴬ   = λ { (γ , α) → f.ᴬ γ α } ;
 
 appP : {Γ : Con} {a : TmS Γ U} → {B : TyP (Γ ▶P El a)} → (f : TmP Γ (ΠP a B)) → TmP (Γ ▶P El a) B
 appP {a = a}{B} f = record { ᴬ   = λ { (γ , α) → f.ᴬ γ α } ;
-                             ᴹ   = λ { {γᴬ , αᴬ} {δᴬ , βᴬ} (γᴹ , lift refl) → (f.ᴹ γᴹ αᴬ) } }
+                             ᴹ   = λ { {γᴬ , αᴬ} {δᴬ , βᴬ} (γᴹ , lift refl) → (f.ᴹ γᴹ αᴬ) } ;
+                             sz  = S.app f.sz }
   where
     module a = TmS a
     module B = TyP B
@@ -142,46 +165,54 @@ appP {a = a}{B} f = record { ᴬ   = λ { (γ , α) → f.ᴬ γ α } ;
 --External function type
 Π̂S : {Γ : Con} (T : Set) (B : T → TyS Γ) → TyS Γ
 Π̂S T B = record { ᴬ   = λ γᴬ → (τ : T) → TyS.ᴬ (B τ) γᴬ ;
-                  ᴹ   = λ γᴹ πᴬ ϕᴬ → (τ : T) → TyS.ᴹ (B τ) γᴹ (πᴬ τ) (ϕᴬ τ) }
+                  ᴹ   = λ γᴹ πᴬ ϕᴬ → (τ : T) → TyS.ᴹ (B τ) γᴹ (πᴬ τ) (ϕᴬ τ) ;
+                  sz  = S.Π̂ T λ τ → TyS.sz (B τ) }
 
 Π̂P : {Γ : Con} (T : Set) (A : T → TyP Γ) → TyP Γ
 Π̂P T A = record { ᴬ  = λ γᴬ → (τ : T) → TyP.ᴬ (A τ) γᴬ;
-                  ᴹ  = λ γᴹ πᴬ ϕᴬ → (τ : T) → TyP.ᴹ (A τ) γᴹ (πᴬ τ) (ϕᴬ τ) }
+                  ᴹ  = λ γᴹ πᴬ ϕᴬ → (τ : T) → TyP.ᴹ (A τ) γᴹ (πᴬ τ) (ϕᴬ τ) ;
+                  sz = S.Π̂ T λ τ → TyP.sz (A τ) }
 
 âppS : {Γ : Con} {T : Set} {B : T → TyS Γ} (f : TmS Γ (Π̂S T B)) (τ : T) → TmS Γ (B τ)
 âppS {Γ}{T}{B} f τ = record { ᴬ  = λ γᴬ → f.ᴬ γᴬ τ ;
-                              ᴹ  = λ γᴹ → f.ᴹ γᴹ τ }
+                              ᴹ  = λ γᴹ → f.ᴹ γᴹ τ ;
+                              sz = f.sz S.$̂ τ }
   where
     module f = TmS f
     module Γ = Con Γ
 
 âppP : {Γ : Con} {T : Set} {B : T → TyP Γ} (f : TmP Γ (Π̂P T B)) (τ : T) → TmP Γ (B τ)
 âppP {Γ}{T}{B} f τ = record { ᴬ  = λ γᴬ → f.ᴬ γᴬ τ ;
-                              ᴹ  = λ γᴹ → f.ᴹ γᴹ τ }
+                              ᴹ  = λ γᴹ → f.ᴹ γᴹ τ ;
+                              sz = f.sz S.$̂ τ }
   where
     module f = TmP f
 
 id : ∀{Γ} → Sub Γ Γ
 id {Γ} = record { ᴬ   = λ γ → γ ;
-                  ᴹ   = λ γᴹ → γᴹ }
+                  ᴹ   = λ γᴹ → γᴹ ;
+                  sz  = S.id }
 
 _∘_ : ∀{Γ Δ Σ} → Sub Δ Σ → Sub Γ Δ → Sub Γ Σ
 σ ∘ δ = record { ᴬ   = λ γ → σ.ᴬ (δ.ᴬ γ) ;
-                 ᴹ   = λ γᴹ → σ.ᴹ (δ.ᴹ γᴹ) }
+                 ᴹ   = λ γᴹ → σ.ᴹ (δ.ᴹ γᴹ) ;
+                 sz  = σ.sz S.∘ δ.sz }
   where
     module σ = Sub σ
     module δ = Sub δ
 
 _[_]TS : ∀{Γ Δ} → TyS Δ → Sub Γ Δ → TyS Γ
 _[_]TS B σ = record { ᴬ   = λ γ → B.ᴬ (σ.ᴬ γ) ;
-                      ᴹ   = λ γᴹ αᴬ βᴬ → B.ᴹ (σ.ᴹ γᴹ) αᴬ βᴬ }
+                      ᴹ   = λ γᴹ αᴬ βᴬ → B.ᴹ (σ.ᴹ γᴹ) αᴬ βᴬ ;
+                      sz  = B.sz S.[ σ.sz ]T }
   where
     module B = TyS B
     module σ = Sub σ
 
 _[_]TP : ∀{Γ Δ} → TyP Δ → Sub Γ Δ → TyP Γ
 _[_]TP A σ = record { ᴬ   = λ γ → A.ᴬ (σ.ᴬ γ) ;
-                      ᴹ   = λ γᴹ αᴬ βᴬ → A.ᴹ (σ.ᴹ γᴹ) αᴬ βᴬ }
+                      ᴹ   = λ γᴹ αᴬ βᴬ → A.ᴹ (σ.ᴹ γᴹ) αᴬ βᴬ ;
+                      sz  = A.sz S.[ σ.sz ]T }
   where
     module A = TyP A
     module σ = Sub σ
@@ -192,7 +223,8 @@ _[_]T {S} = _[_]TS
 
 _[_]tS : ∀{Γ Δ}{A : TyS Δ} → TmS Δ A → (σ : Sub Γ Δ) → TmS Γ (A [ σ ]TS)
 _[_]tS {Γ}{Δ}{A} a σ = record { ᴬ   = λ γ → a.ᴬ (σ.ᴬ γ) ;
-                                ᴹ   = λ γᴹ → a.ᴹ (σ.ᴹ γᴹ) }
+                                ᴹ   = λ γᴹ → a.ᴹ (σ.ᴹ γᴹ) ;
+                                sz  = a.sz S.[ σ.sz ]t }
   where
     module A = TyS A
     module a = TmS a
@@ -200,7 +232,8 @@ _[_]tS {Γ}{Δ}{A} a σ = record { ᴬ   = λ γ → a.ᴬ (σ.ᴬ γ) ;
 
 _[_]tP : ∀{Γ Δ}{A : TyP Δ} → TmP Δ A → (σ : Sub Γ Δ) → TmP Γ (A [ σ ]TP)
 _[_]tP {Γ}{Δ}{A} a σ = record { ᴬ   = λ γ → a.ᴬ (σ.ᴬ γ) ;
-                                ᴹ   = λ γᴹ → a.ᴹ (σ.ᴹ γᴹ) }
+                                ᴹ   = λ γᴹ → a.ᴹ (σ.ᴹ γᴹ) ;
+                                sz  = a.sz S.[ σ.sz ]t }
   where
     module A = TyP A
     module a = TmP a
@@ -211,19 +244,24 @@ _[_]t {P} = _[_]tP
 _[_]t {S} = _[_]tS
 
 ε : ∀{Γ} → Sub Γ ∙
-ε = record { ᴬ   = λ _ → lift tt ;
-             ᴹ   = λ _ → lift tt }
+ε {Γ} = record { ᴬ   = λ _ → lift tt ;
+                 ᴹ   = λ _ → lift tt ;
+                 sz  = S.ε S.,s Γ.Cod S.,s Γ.Dec }
+  where
+    module Γ = Con Γ
 
 _,tS_  : ∀{Γ Δ}(σ : Sub Γ Δ){B : TyS Δ} → TmS Γ (B [ σ ]TS) → Sub Γ (Δ ▶S B)
 σ ,tS t = record { ᴬ   = λ γ → σ.ᴬ γ , t.ᴬ γ ;
-                   ᴹ   = λ γᴹ → σ.ᴹ γᴹ , t.ᴹ γᴹ }
+                   ᴹ   = λ γᴹ → σ.ᴹ γᴹ , t.ᴹ γᴹ ;
+                   sz  = σ.sz S.,s t.sz }
   where
     module σ = Sub σ
     module t = TmS t
 
 _,tP_ : ∀{Γ Δ}(σ : Sub Γ Δ) → {A : TyP Δ} → (t : TmP Γ (A [ σ ]TP)) → Sub Γ (Δ ▶P A)
 _,tP_ σ {A} t = record { ᴬ   = λ γ → σ.ᴬ γ , t.ᴬ γ ;
-                         ᴹ   = λ γᴹ → σ.ᴹ γᴹ , t.ᴹ γᴹ }
+                         ᴹ   = λ γᴹ → σ.ᴹ γᴹ , t.ᴹ γᴹ ;
+                         sz  = σ.sz S.,s t.sz }
   where
     module σ = Sub σ
     module A = TyP A
@@ -235,13 +273,15 @@ _,t_ {S} = _,tS_
 
 π₁S : ∀{Γ Δ}{A : TyS Δ} → Sub Γ (Δ ▶S A) → Sub Γ Δ
 π₁S σ = record { ᴬ   = λ γ → ₁ (σ.ᴬ γ) ;
-                 ᴹ   = λ γᴹ → ₁ (σ.ᴹ γᴹ) }
+                 ᴹ   = λ γᴹ → ₁ (σ.ᴹ γᴹ) ;
+                 sz  = S.π₁ σ.sz }
   where
     module σ = Sub σ
 
 π₁P : ∀{Γ Δ}{A : TyP Δ} → Sub Γ (Δ ▶P A) → Sub Γ Δ
 π₁P σ = record { ᴬ   = λ γ → ₁ (σ.ᴬ γ) ;
-                 ᴹ   = λ γᴹ → ₁ (σ.ᴹ γᴹ) }
+                 ᴹ   = λ γᴹ → ₁ (σ.ᴹ γᴹ) ;
+                 sz  = S.π₁ σ.sz }
   where
     module σ = Sub σ
 
@@ -251,13 +291,15 @@ _,t_ {S} = _,tS_
 
 π₂S : ∀{Γ Δ}{A : TyS Δ}(σ : Sub Γ (Δ ▶S A)) → TmS Γ (A [ π₁S σ ]TS)
 π₂S {Γ}{Δ}{A} σ = record { ᴬ   = λ γ → ₂ (σ.ᴬ γ) ;
-                           ᴹ   = λ γᴹ → ₂ (σ.ᴹ γᴹ) }
+                           ᴹ   = λ γᴹ → ₂ (σ.ᴹ γᴹ) ;
+                           sz  = S.π₂ σ.sz }
   where
     module σ = Sub σ
 
 π₂P : ∀{Γ Δ}{A : TyP Δ}(σ : Sub Γ (Δ ▶P A)) → TmP Γ (A [ π₁P σ ]TP)
 π₂P {Γ}{Δ}{A} σ = record { ᴬ   = λ γ → ₂ (σ.ᴬ γ) ;
-                           ᴹ   = λ γ → ₂ (σ.ᴹ γ) }
+                           ᴹ   = λ γ → ₂ (σ.ᴹ γ) ;
+                           sz  = S.π₂ σ.sz }
   where
     module A = TyP A
     module σ = Sub σ
@@ -290,8 +332,9 @@ infix 4 <_>S
 
 <_>P : ∀{Γ}{A : TyP Γ} → TmP Γ A → Sub Γ (Γ ▶P A)
 < t >P = record
-           { ᴬ = λ γᴬ → γᴬ , t.ᴬ γᴬ ;
-             ᴹ = λ γᴹ → γᴹ , t.ᴹ γᴹ }
+           { ᴬ  = λ γᴬ → γᴬ , t.ᴬ γᴬ ;
+             ᴹ  = λ γᴹ → γᴹ , t.ᴹ γᴹ ;
+             sz = S.< t.sz > }
   where
     module t = TmP t
 infix 4 <_>P

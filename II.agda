@@ -1,3 +1,5 @@
+{-# OPTIONS --rewriting #-}
+
 module II where
 
 open import Lib hiding (id; _∘_)

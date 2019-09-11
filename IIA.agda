@@ -128,13 +128,6 @@ El[] = refl
       → (Π a B) [ σ ]T ≡ Π (a [ σ ]t) (B [ σ ^ El a ]T)
 Π[] = refl
 
-Π̂ : ∀{Γ}(T : Set)(B : Ty Γ) → Ty Γ
-Π̂ T B γ = (τ : T) → B γ
-
-Π̂[] : ∀{Γ Δ}{σ : Sub Γ Δ}{T : Set}{B : Ty Δ}
-      → (Π̂ T B) [ σ ]T ≡ Π̂ T (B [ σ ]T)
-Π̂[] = refl
-
 app : ∀{Γ}{a : Tm Γ U}{B : Ty (Γ ▶ El a)} → Tm Γ (Π a B) → Tm (Γ ▶ El a) B
 app t (γ , lift α) = t γ α
 
@@ -143,4 +136,17 @@ app[] : ∀{Γ Δ}{σ : Sub Γ Δ}{a : Tm Δ U}{B : Ty (Δ ▶ El a)}{t : Tm Δ 
 app[] = refl
 
 _$_ : ∀{Γ}{a : Tm Γ U}{B : Ty (Γ ▶  El a)}(f : Tm Γ (Π a B))(x : Tm Γ (El a)) → Tm Γ (B [ < x > ]T)
-_$_ = λ f x γ → app f (γ , x γ)
+_$_ = λ f x → (app f) [ < x > ]t
+
+Π̂ : ∀{Γ}(T : Set)(B : T → Ty Γ) → Ty Γ
+Π̂ T B γ = (τ : T) → (B τ) γ
+
+Π̂[] : ∀{Γ Δ}{σ : Sub Γ Δ}{T : Set}{B : T → Ty Δ} → (Π̂ T B) [ σ ]T ≡ Π̂ T λ τ → B τ [ σ ]T
+Π̂[] = refl
+
+_$̂_ : ∀{Γ}{T : Set}{B : T → Ty Γ} → Tm Γ (Π̂ T B) → (τ : T) → Tm Γ (B τ)
+_$̂_ f τ γ = f γ τ
+
+$̂[] : ∀{Γ Δ}{σ : Sub Γ Δ}{T : Set}{B : T → Ty Δ}{f : Tm Δ (Π̂ T B)}{τ : T}
+       → (f $̂ τ) [ σ ]t ≡ ((f [ σ ]t) $̂ τ)
+$̂[] = refl
