@@ -13,9 +13,9 @@ infix  6 _∘_
 infixl 8 _[_]tS
 infixl 8 _[_]tP
 infixl 8 _[_]t
-infixl 5 _,tS_
-infixl 5 _,tP_
-infixl 5 _,t_
+infixl 5 _,sS_
+infixl 5 _,sP_
+infixl 5 _,s_
 infixl 3 _▶_
 infixl 3 _▶S_
 infixl 3 _▶P_
@@ -73,6 +73,8 @@ record Sub (Γ : Con) (Δ : Con) : Set₂ where
     ᴬ   : Γ.ᴬ → Δ.ᴬ
     ᴹ   : ∀{γᴬ δᴬ} → Γ.ᴹ γᴬ δᴬ → Δ.ᴹ (ᴬ γᴬ) (ᴬ δᴬ)
     sz  : S.Sub Γ.sz Δ.sz
+    Cod : ∀ γ → (Δ.Cod S.[ sz ]t) γ ≡ Γ.Cod γ
+    Dec : ∀ γ α → (Δ.Dec S.[ sz ]t) γ α ≡ Γ.Dec γ (coe (Cod γ) α)
 
 ∙ : Con
 ∙ = record { ᴬ   = Lift _ ⊤ ;
@@ -162,6 +164,10 @@ appP {a = a}{B} f = record { ᴬ   = λ { (γ , α) → f.ᴬ γ α } ;
     module B = TyP B
     module f = TmP f
 
+app : {k : PS}{Γ : Con}{a : TmS Γ U}{B : Ty (Γ ▶P El a) k} → (f : Tm Γ (Π a B)) → Tm (Γ ▶P El a) B
+app {P} = appP
+app {S} = appS
+
 --External function type
 Π̂S : {Γ : Con} (T : Set) (B : T → TyS Γ) → TyS Γ
 Π̂S T B = record { ᴬ   = λ γᴬ → (τ : T) → TyS.ᴬ (B τ) γᴬ ;
@@ -172,6 +178,10 @@ appP {a = a}{B} f = record { ᴬ   = λ { (γ , α) → f.ᴬ γ α } ;
 Π̂P T A = record { ᴬ  = λ γᴬ → (τ : T) → TyP.ᴬ (A τ) γᴬ;
                   ᴹ  = λ γᴹ πᴬ ϕᴬ → (τ : T) → TyP.ᴹ (A τ) γᴹ (πᴬ τ) (ϕᴬ τ) ;
                   sz = S.Π̂ T λ τ → TyP.sz (A τ) }
+
+Π̂ : {k : PS}{Γ : Con}(T : Set)(A : T → Ty Γ k) → Ty Γ k
+Π̂ {P} = Π̂P
+Π̂ {S} = Π̂S
 
 âppS : {Γ : Con} {T : Set} {B : T → TyS Γ} (f : TmS Γ (Π̂S T B)) (τ : T) → TmS Γ (B τ)
 âppS {Γ}{T}{B} f τ = record { ᴬ  = λ γᴬ → f.ᴬ γᴬ τ ;
@@ -188,15 +198,25 @@ âppP {Γ}{T}{B} f τ = record { ᴬ  = λ γᴬ → f.ᴬ γᴬ τ ;
   where
     module f = TmP f
 
+âpp : {k : PS} {Γ : Con} {T : Set} {B : T → Ty Γ k} (f : Tm Γ (Π̂ T B)) (τ : T) → Tm Γ (B τ)
+âpp {P} = âppP
+âpp {S} = âppS
+
 id : ∀{Γ} → Sub Γ Γ
 id {Γ} = record { ᴬ   = λ γ → γ ;
                   ᴹ   = λ γᴹ → γᴹ ;
-                  sz  = S.id }
+                  sz  = S.id ;
+                  Cod = λ γ → refl ;
+                  Dec = λ γ α → refl }
 
 _∘_ : ∀{Γ Δ Σ} → Sub Δ Σ → Sub Γ Δ → Sub Γ Σ
 σ ∘ δ = record { ᴬ   = λ γ → σ.ᴬ (δ.ᴬ γ) ;
                  ᴹ   = λ γᴹ → σ.ᴹ (δ.ᴹ γᴹ) ;
-                 sz  = σ.sz S.∘ δ.sz }
+                 sz  = σ.sz S.∘ δ.sz ;
+                 Cod = λ γ → σ.Cod (δ.sz γ) ◾ δ.Cod γ ;
+                 Dec = λ γ α → σ.Dec (δ.sz γ) α
+                               ◾ δ.Dec γ (coe (σ.Cod (δ.sz γ)) α)
+                               ◾ δ.Γ.Dec γ & coe∘ (δ.Cod γ) (σ.Cod (δ.sz γ)) α }
   where
     module σ = Sub σ
     module δ = Sub δ
@@ -246,42 +266,52 @@ _[_]t {S} = _[_]tS
 ε : ∀{Γ} → Sub Γ ∙
 ε {Γ} = record { ᴬ   = λ _ → lift tt ;
                  ᴹ   = λ _ → lift tt ;
-                 sz  = S.ε S.,s Γ.Cod S.,s Γ.Dec }
+                 sz  = S.ε S.,s Γ.Cod S.,s Γ.Dec ;
+                 Cod = λ γ → refl ;
+                 Dec = λ γ α → refl }
   where
     module Γ = Con Γ
 
-_,tS_  : ∀{Γ Δ}(σ : Sub Γ Δ){B : TyS Δ} → TmS Γ (B [ σ ]TS) → Sub Γ (Δ ▶S B)
-σ ,tS t = record { ᴬ   = λ γ → σ.ᴬ γ , t.ᴬ γ ;
+_,sS_  : ∀{Γ Δ}(σ : Sub Γ Δ){B : TyS Δ} → TmS Γ (B [ σ ]TS) → Sub Γ (Δ ▶S B)
+σ ,sS t = record { ᴬ   = λ γ → σ.ᴬ γ , t.ᴬ γ ;
                    ᴹ   = λ γᴹ → σ.ᴹ γᴹ , t.ᴹ γᴹ ;
-                   sz  = σ.sz S.,s t.sz }
+                   sz  = σ.sz S.,s t.sz ;
+                   Cod = λ γ → σ.Cod γ ;
+                   Dec = λ γ α → σ.Dec γ α }
   where
     module σ = Sub σ
     module t = TmS t
 
-_,tP_ : ∀{Γ Δ}(σ : Sub Γ Δ) → {A : TyP Δ} → (t : TmP Γ (A [ σ ]TP)) → Sub Γ (Δ ▶P A)
-_,tP_ σ {A} t = record { ᴬ   = λ γ → σ.ᴬ γ , t.ᴬ γ ;
+_,sP_ : ∀{Γ Δ}(σ : Sub Γ Δ) → {A : TyP Δ} → (t : TmP Γ (A [ σ ]TP)) → Sub Γ (Δ ▶P A)
+_,sP_ σ {A} t = record { ᴬ   = λ γ → σ.ᴬ γ , t.ᴬ γ ;
                          ᴹ   = λ γᴹ → σ.ᴹ γᴹ , t.ᴹ γᴹ ;
-                         sz  = σ.sz S.,s t.sz }
+                         sz  = σ.sz S.,s t.sz ;
+                         Cod = λ γ → σ.Cod γ ;
+                         Dec = λ γ α → σ.Dec γ α }
   where
     module σ = Sub σ
     module A = TyP A
     module t = TmP t
 
-_,t_ : ∀{k Γ Δ}(σ : Sub Γ Δ){A : Ty Δ k} → Tm Γ (A [ σ ]T) → Sub Γ (Δ ▶ A)
-_,t_ {P} = _,tP_
-_,t_ {S} = _,tS_
+_,s_ : ∀{k Γ Δ}(σ : Sub Γ Δ){A : Ty Δ k} → Tm Γ (A [ σ ]T) → Sub Γ (Δ ▶ A)
+_,s_ {P} = _,sP_
+_,s_ {S} = _,sS_
 
 π₁S : ∀{Γ Δ}{A : TyS Δ} → Sub Γ (Δ ▶S A) → Sub Γ Δ
 π₁S σ = record { ᴬ   = λ γ → ₁ (σ.ᴬ γ) ;
                  ᴹ   = λ γᴹ → ₁ (σ.ᴹ γᴹ) ;
-                 sz  = S.π₁ σ.sz }
+                 sz  = S.π₁ σ.sz ;
+                 Cod = λ γ → σ.Cod γ ;
+                 Dec = λ γ α → σ.Dec γ α }
   where
     module σ = Sub σ
 
 π₁P : ∀{Γ Δ}{A : TyP Δ} → Sub Γ (Δ ▶P A) → Sub Γ Δ
 π₁P σ = record { ᴬ   = λ γ → ₁ (σ.ᴬ γ) ;
                  ᴹ   = λ γᴹ → ₁ (σ.ᴹ γᴹ) ;
-                 sz  = S.π₁ σ.sz }
+                 sz  = S.π₁ σ.sz ;
+                 Cod = λ γ → σ.Cod γ ;
+                 Dec = λ γ α → σ.Dec γ α }
   where
     module σ = Sub σ
 
@@ -327,14 +357,16 @@ vs {S}{l} t = vsS {l} t
 
 -- It's kind of amazing that this works
 <_>S : ∀{Γ}{A : TyS Γ} → TmS Γ A → Sub Γ (Γ ▶S A)
-< t >S = id ,tS t
+< t >S = id ,sS t
 infix 4 <_>S
 
 <_>P : ∀{Γ}{A : TyP Γ} → TmP Γ A → Sub Γ (Γ ▶P A)
 < t >P = record
-           { ᴬ  = λ γᴬ → γᴬ , t.ᴬ γᴬ ;
-             ᴹ  = λ γᴹ → γᴹ , t.ᴹ γᴹ ;
-             sz = S.< t.sz > }
+           { ᴬ   = λ γᴬ → γᴬ , t.ᴬ γᴬ ;
+             ᴹ   = λ γᴹ → γᴹ , t.ᴹ γᴹ ;
+             sz  = S.< t.sz > ;
+             Cod = λ γ → refl ;
+             Dec = λ γ α → refl }
   where
     module t = TmP t
 infix 4 <_>P
@@ -350,7 +382,15 @@ atS {Γ}{a}{B} t u = appS {Γ}{a}{B} t [ < u >P ]tS
 atP : ∀{Γ a}{B : TyP (Γ ▶P El a)}(t : TmP Γ (ΠP a B))(u : TmP Γ (El a)) → TmP Γ (B [ < u >P ]TP)
 atP {Γ}{a}{B} t u = appP {Γ}{a}{B} t [ < u >P ]tP
 
-{-_^_ : ∀ {k}{Γ Δ : Con}(σ : Sub Γ Δ)(A : Ty Δ k) → Sub (Γ ▶ (A [ σ ]T)) (Δ ▶ A)
-_^_ {k}{Γ} {Δ} σ A = {!!} --σ ∘ wk , ? --coe (Tm _ & [][]T) (vz {k}{Γ}{A [ σ ]T})
-infixl 5 _^_-}
+_^P_ : ∀{Γ Δ : Con}(σ : Sub Γ Δ)(A : TyP Δ) → Sub (Γ ▶ (A [ σ ]T)) (Δ ▶ A)
+_^P_ {Γ} {Δ} σ A = σ ∘ (wk {A = A [ σ ]T}) ,sP (vz {Γ = Γ}{A [ σ ]T})
+
+_^S_ : ∀{Γ Δ : Con}(σ : Sub Γ Δ)(B : TyS Δ) → Sub (Γ ▶ (B [ σ ]T)) (Δ ▶ B)
+_^S_ {Γ} {Δ} σ B = σ ∘ (wk {A = B [ σ ]T}) ,sS (vz {Γ = Γ}{B [ σ ]T})
+
+_^_ : ∀{k}{Γ Δ : Con}(σ : Sub Γ Δ)(A : Ty Δ k) → Sub (Γ ▶ (A [ σ ]T)) (Δ ▶ A)
+_^_ {P} = _^P_
+_^_ {S} = _^S_
+
+infixl 5 _^_
 
